@@ -1,0 +1,15 @@
+[package]
+name = "sinimod_single_band_eq"
+version = "0.1.0"
+edition = "2021"
+authors = ["dominicreynolds97"]
+
+description = "A simple single band EQ"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+nih_plug = { path = "../nih-plug/", features = ["assert_process_allocs", "standalone"] }
+nih_plug_egui = { path = "../nih-plug/nih_plug_egui/" }
+
