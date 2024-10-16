@@ -3,9 +3,9 @@
 ## Single Band EQ
 
 ### Requirements 
-- [ ] Selecting a frequency
-- [ ] Q parameter
-- [ ] Gain ± 18 dB
+- [x] Selecting a frequency
+- [x] Q parameter
+- [x] Gain ± 18 dB
 
 ### Nice to haves
 - [ ] GUI with dials for all of the above features

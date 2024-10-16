@@ -55,9 +55,9 @@ impl BandParams {
                 "gain",
                 util::db_to_gain(0.0),
                 FloatRange::Skewed {
-                    min: util::db_to_gain(-30.0),
-                    max: util::db_to_gain(30.0),
-                    factor: FloatRange::gain_skew_factor(-30.0, 30.0),
+                    min: util::db_to_gain(-18.0),
+                    max: util::db_to_gain(18.0),
+                    factor: FloatRange::gain_skew_factor(-18.0, 18.0),
                 },
             )
             .with_smoother(SmoothingStyle::Logarithmic(50.0))
