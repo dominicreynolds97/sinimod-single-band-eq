@@ -1,6 +1,7 @@
 use nih_plug::prelude::*;
 use nih_plug_egui::{create_egui_editor, egui, widgets::ParamSlider, EguiState};
-use std::sync::Arc;
+use core::f32;
+use std::{f32::consts::PI, sync::Arc};
 
 pub struct Equaliser {
     params: Arc<EqualiserParams>,
@@ -11,35 +12,43 @@ pub struct EqualiserParams {
     #[persist = "editor-state"]
     editor_state: Arc<EguiState>,
 
-    #[id = "frequency"]
+    #[nested(group = "Band")]
+    pub band: BandParams,
+
+}
+
+#[derive(Params)]
+pub struct BandParams {
+    #[id = "frequency"] // Center frequency
     pub frequency: FloatParam,
 
-    #[id = "gain"]
+    #[id = "gain"] // dB - Boost/Cut gain
     pub gain: FloatParam,
 
     #[id = "q"]
     pub q: FloatParam,
+
+    pub reference_gain: f32,
+
+    // Level at which the bandwidth is measured
+    pub bandwidth_gain: f32,
 }
 
-impl Default for Equaliser {
-    fn default() -> Self {
-        Self {
-            params: Arc::new(EqualiserParams::default()),
-        }
-    }
+pub struct FilterCoeffs {
+    a: [f32; 3],
+    b: [f32; 3],
 }
 
-impl Default for EqualiserParams {
-    fn default() -> Self {
-        Self {
-            editor_state: EguiState::from_size(300, 180),
+impl BandParams {
+    fn new(f: f32) -> Self {
+        BandParams {
             frequency: FloatParam::new(
                 "frequency",
-                400.0,
+                f,
                 FloatRange::Skewed {
                     min: 20.0,
                     max: 20_000.0,
-                    factor: FloatRange::skew_factor(-10.0)
+                    factor: FloatRange::skew_factor(-1.0)
                 }
             ),
             gain: FloatParam::new(
@@ -57,9 +66,46 @@ impl Default for EqualiserParams {
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             q: FloatParam::new(
                 "q",
-                1.0,
-                FloatRange::Skewed { min: 0.01, max: 20.0, factor: 0.4 }
-            )
+                3.0,
+                FloatRange::Linear { min: 0.0, max: 20.0 }
+            ),
+            bandwidth_gain: 9.0,
+            reference_gain: 0.0,
+        }
+    }
+
+    fn peak_filter_params(&self, sample_frequency: f32) -> FilterCoeffs {
+        let w = 2.0 * PI * (&self.frequency.value() / sample_frequency);
+        let alpha = w.sin() / (2.0 * &self.q.value());
+        let a: f32 = 10.0_f32.powf(&self.gain.value() / 20.0).sqrt();
+        FilterCoeffs {
+            a: [
+                1.0 + (alpha / a),
+                -2.0 * w.cos(),
+                1.0 - (alpha / a)
+            ],
+            b: [
+                1.0 + (alpha * a),
+                -2.0 * w.cos(),
+                1.0 - (alpha * a)
+            ],
+        }
+    }
+}
+
+impl Default for Equaliser {
+    fn default() -> Self {
+        Self {
+            params: Arc::new(EqualiserParams::default()),
+        }
+    }
+}
+
+impl Default for EqualiserParams {
+    fn default() -> Self {
+        Self {
+            editor_state: EguiState::from_size(300, 180),
+            band: BandParams::new(400.0),
         }
     }
 }
@@ -107,13 +153,13 @@ impl Plugin for Equaliser {
             move |egui_ctx, setter, _state| {
                 egui::CentralPanel::default().show(egui_ctx, |ui| {
                     ui.label("Frequency");
-                    ui.add(ParamSlider::for_param(&params.frequency, setter));
+                    ui.add(ParamSlider::for_param(&params.band.frequency, setter));
 
                     ui.label("Gain");
-                    ui.add(ParamSlider::for_param(&params.gain, setter));
+                    ui.add(ParamSlider::for_param(&params.band.gain, setter));
 
                     ui.label("Q");
-                    ui.add(ParamSlider::for_param(&params.q, setter));
+                    ui.add(ParamSlider::for_param(&params.band.q, setter));
                 });
             },
         )
@@ -134,11 +180,36 @@ impl Plugin for Equaliser {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        for channel_samples in buffer.iter_samples() {
-            let gain = self.params.gain.smoothed.next();
+        let coeffs = &self.params.band.peak_filter_params(41000.0);
+        let channels = buffer.channels();
+        let mut x_prev: Vec<[f32; 3]> = Vec::new();
+        let mut y_prev: Vec<[f32; 3]> = Vec::new();
 
-            for sample in channel_samples {
-                *sample *= gain;
+        for _i in 0..channels {
+            x_prev.push([0.0,0.0,0.0]);
+            y_prev.push([0.0,0.0,0.0]);
+        };
+
+        for channel_samples in buffer.iter_samples() {
+            let mut c = 0;
+            for channel_sample in channel_samples {
+                let x = x_prev.get_mut(c).expect("channels should always be in bounds");
+                let y = y_prev.get_mut(c).expect("channels should always be in bounds");
+
+                x[2] = x[1];
+                x[1] = x[0];
+                x[0] = channel_sample.clone();
+                y[2] = y[1];
+                y[1] = y[0];
+                
+                *channel_sample = (coeffs.b[0] / coeffs.a[0]) * x[0];
+                *channel_sample += (coeffs.b[1] / coeffs.a[0]) * x[1];
+                *channel_sample += (coeffs.b[2] / coeffs.a[0]) * x[2];
+                *channel_sample -= (coeffs.a[1] / coeffs.a[0]) * y[1];
+                *channel_sample -= (coeffs.a[2] / coeffs.a[0]) * y[2];
+
+                c += 1;
+                y[0] = channel_sample.clone();
             }
         }
         
