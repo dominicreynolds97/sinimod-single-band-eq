@@ -77,8 +77,10 @@ impl ParamSwitchButton {
         //let current_value = self.param_base.unmodulated_normalized_value();
         let new_value = match self.value {
             FilterTypes::PEAK => 0.0,
-            FilterTypes::HPF => 0.5,
-            FilterTypes::LPF => 1.0,
+            FilterTypes::HPF => 0.25,
+            FilterTypes::LPF => 0.5,
+            FilterTypes::LS => 0.75,
+            FilterTypes::HS => 1.0,
         };
 
         self.param_base.begin_set_parameter(cx);
@@ -127,29 +129,11 @@ impl View for ParamSwitchButton {
     }
 }
 
-/// Extension methods for [`ParamButton`] handles.
-pub trait ParamButtonExt {
-    /// Don't respond to scroll wheel events. Useful when this button is used as part of a scrolling
-    /// view.
-    fn disable_scroll_wheel(self) -> Self;
-
-    /// Change the colors scheme for a bypass button. This simply adds the `bypass` class.
-    fn for_bypass(self) -> Self;
-
-    /// Change the label used for the button. If this is not set, then the parameter's name will be
-    /// used.
+pub trait ParamSwitchButtonExt {
     fn with_label(self, value: impl Into<String>) -> Self;
 }
 
-impl ParamButtonExt for Handle<'_, ParamSwitchButton> {
-    fn disable_scroll_wheel(self) -> Self {
-        self.modify(|param_slider: &mut ParamSwitchButton| param_slider.use_scroll_wheel = false)
-    }
-
-    fn for_bypass(self) -> Self {
-        self.class("bypass")
-    }
-
+impl ParamSwitchButtonExt for Handle<'_, ParamSwitchButton> {
     fn with_label(self, value: impl Into<String>) -> Self {
         self.modify(|param_button: &mut ParamSwitchButton| {
             param_button.label_override = Some(value.into())

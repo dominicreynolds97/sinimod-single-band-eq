@@ -31,6 +31,12 @@ pub enum FilterTypes {
     #[id="lpf"]
     #[name="Low Pass"]
     LPF,
+    #[id="ls"]
+    #[name="Low Shelf"]
+    LS,
+    #[id="hs"]
+    #[name="High Shelf"]
+    HS,
 }
 
 #[derive(Params, Lens)]
@@ -69,9 +75,9 @@ impl BandParams {
                 "gain",
                 util::db_to_gain(0.0),
                 FloatRange::Skewed {
-                    min: util::db_to_gain(-18.0),
-                    max: util::db_to_gain(18.0),
-                    factor: FloatRange::gain_skew_factor(-18.0, 18.0),
+                    min: util::db_to_gain(-30.0),
+                    max: util::db_to_gain(30.0),
+                    factor: FloatRange::gain_skew_factor(-30.0, 30.0),
                 },
             )
             .with_smoother(SmoothingStyle::Logarithmic(50.0))
@@ -81,7 +87,7 @@ impl BandParams {
             q: FloatParam::new(
                 "q",
                 3.0,
-                FloatRange::Linear { min: 0.0, max: 20.0 }
+                FloatRange::Linear { min: 0.01, max: 20.0 }
             ),
             filter_type: EnumParam::new(
                 "filter-type",
@@ -107,6 +113,43 @@ impl BandParams {
             FilterTypes::PEAK => self.peak_filter_params(sample_rate),
             FilterTypes::HPF => self.hpf_filter_params(sample_rate),
             FilterTypes::LPF => self.lpf_filter_params(sample_rate),
+            FilterTypes::HS => self.hs_filter_params(sample_rate),
+            FilterTypes::LS => self.ls_filter_params(sample_rate),
+        }
+    }
+
+    fn ls_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
+        let w = self.get_w(sample_rate);
+        let a = self.get_a();
+        let alpha = self.get_alpha(w);
+        FilterCoeffs {
+            a: [
+                (a + 1.0) + ((a - 1.0) * w.cos()) + (2.0 * (a * alpha).sqrt()),
+                -2.0 * ((a - 1.0) + ((a + 1.0) * w.cos())),
+                (a + 1.0) + ((a - 1.0) * w.cos()) - (2.0 * (a * alpha).sqrt()),
+            ],
+            b: [
+                a * ((a + 1.0) - ((a - 1.0) * w.cos()) + (2.0 * (a * alpha).sqrt())),
+                2.0 * a * ((a - 1.0) - ((a + 1.0) * w.cos())),
+                a * ((a + 1.0) - ((a - 1.0) * w.cos()) - (2.0 * (a * alpha).sqrt())),
+            ],
+        }
+    }
+    fn hs_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
+        let w = self.get_w(sample_rate);
+        let a = self.get_a();
+        let alpha = self.get_alpha(w);
+        FilterCoeffs {
+            a: [
+                (a + 1.0) - ((a - 1.0) * w.cos()) + (2.0 * (a * alpha).sqrt()),
+                2.0 * ((a - 1.0) - ((a + 1.0) * w.cos())),
+                (a + 1.0) - ((a - 1.0) * w.cos()) - (2.0 * (a * alpha).sqrt()),
+            ],
+            b: [
+                a * ((a + 1.0) + ((a - 1.0) * w.cos()) + (2.0 * (a * alpha).sqrt())),
+                -2.0 * a * ((a - 1.0) + ((a + 1.0) * w.cos())),
+                a * ((a + 1.0) + ((a - 1.0) * w.cos()) - (2.0 * (a * alpha).sqrt())),
+            ],
         }
     }
 

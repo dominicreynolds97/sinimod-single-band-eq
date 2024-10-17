@@ -1,9 +1,9 @@
 use nih_plug::prelude::Editor;
-use nih_plug_vizia::{assets, create_vizia_editor, vizia::{prelude::*, views}, widgets::{ParamSlider, ResizeHandle}, ViziaState, ViziaTheming};
+use nih_plug_vizia::{assets, create_vizia_editor, vizia::prelude::*, widgets::{ParamSlider, ResizeHandle}, ViziaState, ViziaTheming};
 use std::sync::Arc;
 
 
-use crate::{param_switch_button::{ParamButtonExt, ParamSwitchButton}, EqualiserParams, FilterTypes};
+use crate::{param_switch_button::{ParamSwitchButtonExt, ParamSwitchButton}, EqualiserParams, FilterTypes};
 
 #[derive(Lens)]
 struct Data {
@@ -13,7 +13,7 @@ struct Data {
 impl Model for Data {}
 
 pub(crate) fn default_state() -> Arc<ViziaState> {
-    ViziaState::new(|| (400, 300))
+    ViziaState::new(|| (400, 400))
 }
 
 pub(crate) fn create(
@@ -41,6 +41,8 @@ pub(crate) fn create(
                 FilterTypes::HPF => "High Pass Filter",
                 FilterTypes::LPF => "Low Pass Filter",
                 FilterTypes::PEAK => "Peak Filter",
+                FilterTypes::HS => "High Shelf",
+                FilterTypes::LS => "Low Shelf",
             });
             
             Label::new(cx, "Frequency");
@@ -53,10 +55,14 @@ pub(crate) fn create(
             VStack::new(cx, |cx| {
                 Label::new(cx, "Gain");
                 ParamSlider::new(cx, Data::params, |params| &params.band.gain);
-            }).visibility(Data::params.map(|p| p.band.filter_type.value() == FilterTypes::PEAK));
+            }).visibility(Data::params.map(|p| {
+                match p.band.filter_type.value() {
+                    FilterTypes::HPF | FilterTypes::LPF => false,
+                    FilterTypes::PEAK | FilterTypes::LS | FilterTypes::HS => true,
+                }
+            }));
 
 
-            HStack::new(cx, |cx| {
                 ParamSwitchButton::new(
                     cx,
                     Data::params,
@@ -81,8 +87,23 @@ pub(crate) fn create(
                 )
                 .disabled(Data::params.map(|p| p.band.filter_type.value() == FilterTypes::LPF))
                 .with_label("Low Pass");
+                ParamSwitchButton::new(
+                    cx,
+                    Data::params,
+                    |params| &params.band.filter_type,
+                    FilterTypes::HS
+                )
+                .disabled(Data::params.map(|p| p.band.filter_type.value() == FilterTypes::HS))
+                .with_label("High Shelf");
+                ParamSwitchButton::new(
+                    cx,
+                    Data::params,
+                    |params| &params.band.filter_type,
+                    FilterTypes::LS
+                )
+                .disabled(Data::params.map(|p| p.band.filter_type.value() == FilterTypes::LS))
+                .with_label("Low Shelf");
                 
-            });
         })
         .row_between(Pixels(0.0))
         .child_left(Stretch(1.0))
