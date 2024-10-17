@@ -13,7 +13,7 @@ struct Data {
 impl Model for Data {}
 
 pub(crate) fn default_state() -> Arc<ViziaState> {
-    ViziaState::new(|| (400, 400))
+    ViziaState::new(|| (400, 300))
 }
 
 pub(crate) fn create(
@@ -60,9 +60,13 @@ pub(crate) fn create(
                     FilterTypes::HPF | FilterTypes::LPF => false,
                     FilterTypes::PEAK | FilterTypes::LS | FilterTypes::HS => true,
                 }
-            }));
+            }))
+            .row_between(Pixels(0.0))
+            .child_left(Stretch(1.0))
+            .child_right(Stretch(1.0));
 
 
+            HStack::new(cx, |cx| {
                 ParamSwitchButton::new(
                     cx,
                     Data::params,
@@ -103,6 +107,10 @@ pub(crate) fn create(
                 )
                 .disabled(Data::params.map(|p| p.band.filter_type.value() == FilterTypes::LS))
                 .with_label("Low Shelf");
+            })
+            .col_between(Pixels(2.0))
+            .child_left(Stretch(1.0))
+            .child_right(Stretch(1.0));
                 
         })
         .row_between(Pixels(0.0))

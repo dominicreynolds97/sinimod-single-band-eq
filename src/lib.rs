@@ -70,20 +70,20 @@ impl BandParams {
                     max: 20_000.0,
                     factor: FloatRange::skew_factor(-1.0)
                 }
-            ),
+            )
+            .with_unit(" dB"),
             gain: FloatParam::new(
                 "gain",
-                util::db_to_gain(0.0),
-                FloatRange::Skewed {
-                    min: util::db_to_gain(-30.0),
-                    max: util::db_to_gain(30.0),
-                    factor: FloatRange::gain_skew_factor(-30.0, 30.0),
+                0.0,
+                FloatRange::SymmetricalSkewed {
+                    min: -30.0,
+                    max: 30.0,
+                    factor: FloatRange::skew_factor(0.0),
+                    center: 0.0,
                 },
             )
             .with_smoother(SmoothingStyle::Logarithmic(50.0))
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            .with_unit(" dB"),
             q: FloatParam::new(
                 "q",
                 3.0,
@@ -97,7 +97,7 @@ impl BandParams {
     }
 
     fn get_a(&self) -> f32 {
-        10.0_f32.powf(&self.gain.value() / 20.0).sqrt()
+        10.0_f32.powf(self.gain.value() / 20.0).sqrt()
     }
 
     fn get_w(&self, sample_rate: f32) -> f32 {
@@ -120,35 +120,41 @@ impl BandParams {
 
     fn ls_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
         let w = self.get_w(sample_rate);
-        let a = self.get_a();
         let alpha = self.get_alpha(w);
+        let a = self.get_a();
+        let cos_w = w.cos();
+        let sqrt_a = 2.0 * (a * alpha).sqrt();
+
         FilterCoeffs {
             a: [
-                (a + 1.0) + ((a - 1.0) * w.cos()) + (2.0 * (a * alpha).sqrt()),
-                -2.0 * ((a - 1.0) + ((a + 1.0) * w.cos())),
-                (a + 1.0) + ((a - 1.0) * w.cos()) - (2.0 * (a * alpha).sqrt()),
+                (a + 1.0) + (a - 1.0) * cos_w + sqrt_a,
+                -2.0 * ((a - 1.0) + (a + 1.0) * cos_w),
+                (a + 1.0) + (a - 1.0) * cos_w - sqrt_a,
             ],
             b: [
-                a * ((a + 1.0) - ((a - 1.0) * w.cos()) + (2.0 * (a * alpha).sqrt())),
-                2.0 * a * ((a - 1.0) - ((a + 1.0) * w.cos())),
-                a * ((a + 1.0) - ((a - 1.0) * w.cos()) - (2.0 * (a * alpha).sqrt())),
+                a * ((a + 1.0) - (a - 1.0) * cos_w + sqrt_a),
+                2.0 * a * ((a - 1.0) - (a + 1.0) * cos_w),
+                a * ((a + 1.0) - (a - 1.0) * cos_w - sqrt_a),
             ],
         }
     }
     fn hs_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
         let w = self.get_w(sample_rate);
-        let a = self.get_a();
         let alpha = self.get_alpha(w);
+        let a = self.get_a();
+        let cos_w = w.cos();
+        let sqrt_a = 2.0 * (a * alpha).sqrt();
+
         FilterCoeffs {
             a: [
-                (a + 1.0) - ((a - 1.0) * w.cos()) + (2.0 * (a * alpha).sqrt()),
-                2.0 * ((a - 1.0) - ((a + 1.0) * w.cos())),
-                (a + 1.0) - ((a - 1.0) * w.cos()) - (2.0 * (a * alpha).sqrt()),
+                (a + 1.0) - (a - 1.0) * cos_w + sqrt_a,
+                2.0 * ((a - 1.0) - (a + 1.0) * cos_w),
+                    (a + 1.0) - (a - 1.0) * cos_w - sqrt_a,
             ],
             b: [
-                a * ((a + 1.0) + ((a - 1.0) * w.cos()) + (2.0 * (a * alpha).sqrt())),
-                -2.0 * a * ((a - 1.0) + ((a + 1.0) * w.cos())),
-                a * ((a + 1.0) + ((a - 1.0) * w.cos()) - (2.0 * (a * alpha).sqrt())),
+                a * ((a + 1.0) + (a - 1.0) * cos_w + sqrt_a),
+                -2.0 * a * ((a - 1.0) + (a + 1.0) * cos_w),
+                a * ((a + 1.0) + (a - 1.0) * cos_w - sqrt_a),
             ],
         }
     }
@@ -156,16 +162,17 @@ impl BandParams {
     fn hpf_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
         let w = self.get_w(sample_rate);
         let alpha = self.get_alpha(w);
+        let cos_w = w.cos();
         FilterCoeffs {
             a: [
                 1.0 + alpha,
-                -2.0 * w.cos(),
+                -2.0 * cos_w,
                 1.0 - alpha,
             ],
             b: [
-                (1.0 + w.cos()) / 2.0,
-                -1.0 * (1.0 + w.cos()),
-                (1.0 + w.cos()) / 2.0,
+                (1.0 + cos_w) / 2.0,
+                -1.0 * (1.0 + cos_w),
+                (1.0 + cos_w) / 2.0,
             ],
         }
     }
@@ -173,16 +180,17 @@ impl BandParams {
     fn lpf_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
         let w = self.get_w(sample_rate);
         let alpha = self.get_alpha(w);
+        let cos_w = w.cos();
         FilterCoeffs {
             a: [
                 1.0 + alpha,
-                -2.0 * w.cos(),
+                -2.0 * cos_w,
                 1.0 - alpha,
             ],
             b: [
-                (1.0 - w.cos()) / 2.0,
-                1.0 - w.cos(),
-                (1.0 - w.cos()) / 2.0,
+                (1.0 - cos_w) / 2.0,
+                1.0 - cos_w,
+                (1.0 - cos_w) / 2.0,
             ],
         }
     }
@@ -190,16 +198,17 @@ impl BandParams {
     fn peak_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
         let w = self.get_w(sample_rate);
         let alpha = self.get_alpha(w);
+        let cos_w = w.cos();
         let a = self.get_a();
         FilterCoeffs {
             a: [
                 1.0 + (alpha / a),
-                -2.0 * w.cos(),
+                -2.0 * cos_w,
                 1.0 - (alpha / a)
             ],
             b: [
                 1.0 + (alpha * a),
-                -2.0 * w.cos(),
+                -2.0 * cos_w,
                 1.0 - (alpha * a)
             ],
         }
@@ -262,23 +271,6 @@ impl Plugin for Equaliser {
             self.params.clone(),
             self.params.editor_state.clone(),
         )
-//        create_egui_editor(
-//            self.params.editor_state.clone(),
-//            (),
-//            |_, _| {},
-//            move |egui_ctx, setter, _state| {
-//                egui::CentralPanel::default().show(egui_ctx, |ui| {
-//                    ui.label("Frequency");
-//                    ui.add(ParamSlider::for_param(&params.band.frequency, setter));
-//
-//                    ui.label("Gain");
-//                    ui.add(ParamSlider::for_param(&params.band.gain, setter));
-//
-//                    ui.label("Q");
-//                    ui.add(ParamSlider::for_param(&params.band.q, setter));
-//                });
-//            },
-//        )
     }
 
     fn initialize(
