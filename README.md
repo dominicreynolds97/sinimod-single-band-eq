@@ -14,5 +14,5 @@
 - [x] Low pass filter
 - [ ] High shelf filter
 - [ ] Low shelf filter
-- [-] Dropdown to select between different filter types
-- [ ] Different parameters shown depending on the filter type
+- [x] Dropdown to select between different filter types
+- [X] Different parameters shown depending on the filter type
