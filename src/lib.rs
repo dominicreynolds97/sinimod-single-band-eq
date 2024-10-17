@@ -1,23 +1,39 @@
 use nih_plug::prelude::*;
-use nih_plug_egui::{create_egui_editor, egui, widgets::ParamSlider, EguiState};
+use nih_plug_vizia::ViziaState;
 use core::f32;
 use std::{f32::consts::PI, sync::Arc};
+use nih_plug_vizia::vizia::prelude::*;
+
+mod editor;
+mod param_switch_button;
 
 pub struct Equaliser {
     params: Arc<EqualiserParams>,
 }
 
-#[derive(Params)]
+#[derive(Params, Lens)]
 pub struct EqualiserParams {
     #[persist = "editor-state"]
-    editor_state: Arc<EguiState>,
+    editor_state: Arc<ViziaState>,
 
     #[nested(group = "Band")]
     pub band: BandParams,
-
 }
 
-#[derive(Params)]
+#[derive(Enum, PartialEq)]
+pub enum FilterTypes {
+    #[id="peak"]
+    #[name="Peak"]
+    PEAK,
+    #[id="hpf"]
+    #[name="High Pass"]
+    HPF,
+    #[id="lpf"]
+    #[name="Low Pass"]
+    LPF,
+}
+
+#[derive(Params, Lens)]
 pub struct BandParams {
     #[id = "frequency"] // Center frequency
     pub frequency: FloatParam,
@@ -25,16 +41,14 @@ pub struct BandParams {
     #[id = "gain"] // dB - Boost/Cut gain
     pub gain: FloatParam,
 
-    #[id = "q"]
+    #[id = "q"] // Quality factor
     pub q: FloatParam,
 
-    pub reference_gain: f32,
-
-    // Level at which the bandwidth is measured
-    pub bandwidth_gain: f32,
+    #[id = "filter-type"]
+    pub filter_type: EnumParam<FilterTypes>,
 }
 
-pub struct FilterCoeffs {
+struct FilterCoeffs {
     a: [f32; 3],
     b: [f32; 3],
 }
@@ -69,15 +83,71 @@ impl BandParams {
                 3.0,
                 FloatRange::Linear { min: 0.0, max: 20.0 }
             ),
-            bandwidth_gain: 9.0,
-            reference_gain: 0.0,
+            filter_type: EnumParam::new(
+                "filter-type",
+                FilterTypes::PEAK
+            ),
         }
     }
 
-    fn peak_filter_params(&self, sample_frequency: f32) -> FilterCoeffs {
-        let w = 2.0 * PI * (&self.frequency.value() / sample_frequency);
-        let alpha = w.sin() / (2.0 * &self.q.value());
-        let a: f32 = 10.0_f32.powf(&self.gain.value() / 20.0).sqrt();
+    fn get_a(&self) -> f32 {
+        10.0_f32.powf(&self.gain.value() / 20.0).sqrt()
+    }
+
+    fn get_w(&self, sample_rate: f32) -> f32 {
+        2.0 * PI * (&self.frequency.value() / sample_rate)
+    }
+
+    fn get_alpha(&self, w: f32) -> f32 {
+        w.sin() / (2.0 * &self.q.value())
+    }
+
+    fn filter_params(&self, sample_rate: f32) -> FilterCoeffs {
+        match self.filter_type.value() {
+            FilterTypes::PEAK => self.peak_filter_params(sample_rate),
+            FilterTypes::HPF => self.hpf_filter_params(sample_rate),
+            FilterTypes::LPF => self.lpf_filter_params(sample_rate),
+        }
+    }
+
+    fn hpf_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
+        let w = self.get_w(sample_rate);
+        let alpha = self.get_alpha(w);
+        FilterCoeffs {
+            a: [
+                1.0 + alpha,
+                -2.0 * w.cos(),
+                1.0 - alpha,
+            ],
+            b: [
+                (1.0 + w.cos()) / 2.0,
+                -1.0 * (1.0 + w.cos()),
+                (1.0 + w.cos()) / 2.0,
+            ],
+        }
+    }
+
+    fn lpf_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
+        let w = self.get_w(sample_rate);
+        let alpha = self.get_alpha(w);
+        FilterCoeffs {
+            a: [
+                1.0 + alpha,
+                -2.0 * w.cos(),
+                1.0 - alpha,
+            ],
+            b: [
+                (1.0 - w.cos()) / 2.0,
+                1.0 - w.cos(),
+                (1.0 - w.cos()) / 2.0,
+            ],
+        }
+    }
+
+    fn peak_filter_params(&self, sample_rate: f32) -> FilterCoeffs {
+        let w = self.get_w(sample_rate);
+        let alpha = self.get_alpha(w);
+        let a = self.get_a();
         FilterCoeffs {
             a: [
                 1.0 + (alpha / a),
@@ -104,7 +174,7 @@ impl Default for Equaliser {
 impl Default for EqualiserParams {
     fn default() -> Self {
         Self {
-            editor_state: EguiState::from_size(300, 180),
+            editor_state: editor::default_state(),
             band: BandParams::new(400.0),
         }
     }
@@ -145,24 +215,27 @@ impl Plugin for Equaliser {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        let params = self.params.clone();
-        create_egui_editor(
+        editor::create(
+            self.params.clone(),
             self.params.editor_state.clone(),
-            (),
-            |_, _| {},
-            move |egui_ctx, setter, _state| {
-                egui::CentralPanel::default().show(egui_ctx, |ui| {
-                    ui.label("Frequency");
-                    ui.add(ParamSlider::for_param(&params.band.frequency, setter));
-
-                    ui.label("Gain");
-                    ui.add(ParamSlider::for_param(&params.band.gain, setter));
-
-                    ui.label("Q");
-                    ui.add(ParamSlider::for_param(&params.band.q, setter));
-                });
-            },
         )
+//        create_egui_editor(
+//            self.params.editor_state.clone(),
+//            (),
+//            |_, _| {},
+//            move |egui_ctx, setter, _state| {
+//                egui::CentralPanel::default().show(egui_ctx, |ui| {
+//                    ui.label("Frequency");
+//                    ui.add(ParamSlider::for_param(&params.band.frequency, setter));
+//
+//                    ui.label("Gain");
+//                    ui.add(ParamSlider::for_param(&params.band.gain, setter));
+//
+//                    ui.label("Q");
+//                    ui.add(ParamSlider::for_param(&params.band.q, setter));
+//                });
+//            },
+//        )
     }
 
     fn initialize(
@@ -180,7 +253,7 @@ impl Plugin for Equaliser {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        let coeffs = &self.params.band.peak_filter_params(41000.0);
+        let coeffs = &self.params.band.filter_params(41000.0);
         let channels = buffer.channels();
         let mut x_prev: Vec<[f32; 3]> = Vec::new();
         let mut y_prev: Vec<[f32; 3]> = Vec::new();

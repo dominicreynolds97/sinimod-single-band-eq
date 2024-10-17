@@ -9,10 +9,10 @@
 - [x] Peak filter
 
 ### Nice to haves
-- [ ] GUI with dials for all of the above features
-- [ ] High pass filter
-- [ ] Low pass filter
+- [x] GUI with dials for all of the above features
+- [x] High pass filter
+- [x] Low pass filter
 - [ ] High shelf filter
 - [ ] Low shelf filter
-- [ ] Dropdown to select between different filter types
+- [-] Dropdown to select between different filter types
 - [ ] Different parameters shown depending on the filter type
