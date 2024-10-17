@@ -2,7 +2,7 @@
 
 ## Single Band EQ
 
-### Requirements 
+### MVP Requirements 
 - [x] Selecting a frequency
 - [x] Q parameter
 - [x] Gain ± 18 dB
@@ -19,3 +19,7 @@
 - [ ] Use slope factor instead of Q for shelf filters
 - [ ] Use bandwidth and resonance instead of Q for HPF and LPF
 - [ ] Use knobs instead of sliders
+- [ ] Notch filter
+- [ ] Band pass filter
+- [ ] All pass filter
+- [ ] Style nicely
